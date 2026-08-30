@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback,useEffect,useState } from "react";
+import { useCallback,useEffect,useId,useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Coordinates,RunSpot } from "@/types/game";
 
@@ -17,6 +17,7 @@ function requestError(value:unknown,fallback:string){if(value instanceof Error)r
 
 export function useRunSpots(){
   const [spots,setSpots]=useState<RunSpot[]>([]),[viewerId,setViewerId]=useState("");
+  const channelId=useId().replaceAll(":","");
   const load=useCallback(async()=>{
     const client=createClient();if(!client)return;
     const [{data:spotRows},{data:{user}}]=await Promise.all([client.from("run_spots").select(SPOT_COLUMNS).eq("status","active").gt("expires_at",new Date().toISOString()).order("created_at",{ascending:false}).limit(MAX_MAP_RUN_SPOTS),client.auth.getUser()]);
@@ -25,7 +26,7 @@ export function useRunSpots(){
     setSpots(cap((spotRows||[] as unknown as DbSpot[]).map(row=>{const spot=fromDb(row as unknown as DbSpot);return{...spot,joined:spot.ownerId===user?.id||joinedIds.has(spot.id)}})));
   },[]);
 
-  useEffect(()=>{void load();const client=createClient();if(!client)return;const channel=client.channel("public-run-spots-live").on("postgres_changes",{event:"*",schema:"public",table:"run_spots"},()=>void load()).on("postgres_changes",{event:"*",schema:"public",table:"run_spot_joins"},()=>void load()).subscribe();return()=>{void client.removeChannel(channel)}},[load]);
+  useEffect(()=>{void load();const client=createClient();if(!client)return;const channel=client.channel(`public-run-spots-live-${channelId}`).on("postgres_changes",{event:"*",schema:"public",table:"run_spots"},()=>void load()).on("postgres_changes",{event:"*",schema:"public",table:"run_spot_joins"},()=>void load()).subscribe();return()=>{void client.removeChannel(channel)}},[channelId,load]);
 
   const createSpot=useCallback(async(input:CreateRunSpot)=>{const client=createClient();if(!client)throw new Error("Live database is not configured");const {data:{user}}=await client.auth.getUser();if(!user)throw new Error("Login required");const {data,error}=await client.rpc("create_public_run_spot",{p_title:input.title,p_note:input.note,p_latitude:input.position.lat,p_longitude:input.position.lng,p_distance_km:input.distanceKm,p_pace_label:input.pace,p_starts_at:input.startsAt,p_max_members:input.maxMembers||6,p_route_points:input.route||null});if(error||!data)throw requestError(error,"Run spot was not saved");const row=(Array.isArray(data)?data[0]:data) as unknown as DbSpot,saved={...fromDb(row),joined:true};setViewerId(user.id);setSpots(current=>cap([saved,...current.filter(spot=>spot.id!==saved.id)]));if(input.route)saveLocalRoute(saved.id,input.route);return saved},[]);
   const joinSpot=useCallback(async(id:string)=>{const client=createClient();if(!client)throw new Error("Live database is not configured");const {data:{user}}=await client.auth.getUser();if(!user)throw new Error("Login required");const target=spots.find(spot=>spot.id===id);if(target?.partyId&&(target.joined||target.ownerId===user.id))return target.partyId;const {data,error}=await client.rpc("join_public_run_spot",{p_spot_id:id});if(error||!data)throw requestError(error,"Could not join this run");await load();return String(data)},[load,spots]);
