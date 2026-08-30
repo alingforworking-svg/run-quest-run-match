@@ -13,6 +13,7 @@ export interface Quest {
 export interface World { id: string; number: number; name: string; subtitle: string; color: string; progress: number }
 export interface Runner {
   id: string; name: string; username: string; avatar: string; level: number; title: string;
+  totalXp: number; totalKm: number; totalRuns: number; achievements: string[];
   paceMinKm: number; distanceRange: [number, number]; streak: number; rating: number;
   distanceAwayKm: number; availableTimes: string[]; experience: string; style: string; questTypes: QuestType[];
 }
