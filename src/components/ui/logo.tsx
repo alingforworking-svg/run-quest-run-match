@@ -1,0 +1,2 @@
+import { Footprints } from "lucide-react";import Link from "next/link";
+export function Logo({compact=false,href="/home"}:{compact?:boolean;href?:string}){return <Link href={href} data-no-translate className="flex items-center gap-2.5"><span className="grid size-9 -rotate-3 place-items-center rounded-xl rounded-bl-sm bg-[#b6ff22] text-[#111]"><Footprints size={19}/></span>{!compact&&<b className="text-[1.02rem] font-black tracking-[-.06em]">RUN<span className="text-[#b6ff22]">QUEST</span></b>}</Link>}

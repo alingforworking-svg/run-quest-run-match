@@ -1,0 +1,4 @@
+import { AppShell } from "@/components/layout/app-shell";
+import { QuestMaster } from "@/components/game/quest-master";
+import { Sparkles } from "lucide-react";
+export default function QuestMasterPage(){return <AppShell title="PERSONAL QUEST MASTER"><main className="mx-auto max-w-3xl px-4 py-8 md:px-8"><div className="text-center"><span className="mx-auto grid size-16 place-items-center rounded-2xl bg-[#7c42ff]"><Sparkles size={28}/></span><p className="eyebrow mt-5">RUNNER DNA • RULE + SCORING ENGINE</p><h1 className="game-title mt-2 text-5xl">QUEST MASTER</h1><p className="muted mx-auto mt-3 max-w-lg text-xs leading-5">Personalized missions generated locally from your Runner DNA, recent behavior, quest history and reusable templates.</p></div><div className="mt-8"><QuestMaster/></div></main></AppShell>}

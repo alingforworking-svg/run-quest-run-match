@@ -1,0 +1,23 @@
+import type { QuestTemplate } from "@/types/personalization";
+const coreTemplates:QuestTemplate[]=[
+  {templateId:"easy_distance_run",titleVariants:["EASY CITY STEP","FRESH START","CITY RESET"],type:"distance",difficulty:2,minLevel:1,distanceRangeKm:[1,5],xpBase:200,social:false,checkpointRange:[0,2],durationRangeMinutes:[15,60],goals:["health","consistency","fun"],cooldownDays:3,pacePressure:"none"},
+  {templateId:"city_exploration",titleVariants:["SUNSET DISCOVERY","CITY SECRETS","URBAN EXPLORER"],type:"exploration",difficulty:4,minLevel:2,distanceRangeKm:[2,10],xpBase:350,social:false,checkpointRange:[2,6],durationRangeMinutes:[25,100],goals:["exploration","fun","health"],preferredTimes:["afternoon","evening","night"],cooldownDays:3,pacePressure:"light"},
+  {templateId:"social_checkpoint_run",titleVariants:["SOCIAL SUNSET","CHECKPOINT CREW","RUN TOGETHER"],type:"social",difficulty:4,minLevel:2,distanceRangeKm:[2,8],xpBase:400,social:true,checkpointRange:[2,5],durationRangeMinutes:[25,90],goals:["social","fun","exploration"],cooldownDays:2,pacePressure:"light"},
+  {templateId:"pace_attack",titleVariants:["PACE ATTACK","CITY PUSH","SPEED SPARK"],type:"speed",difficulty:7,minLevel:5,distanceRangeKm:[3,12],xpBase:550,social:false,checkpointRange:[1,5],durationRangeMinutes:[20,90],goals:["speed","competition"],preferredTimes:["morning","evening"],cooldownDays:4,pacePressure:"target"},
+  {templateId:"streak_builder",titleVariants:["KEEP THE FLAME","CONSISTENCY LOOP","STREAK SAVER"],type:"consistency",difficulty:3,minLevel:1,distanceRangeKm:[1,6],xpBase:250,social:false,checkpointRange:[0,3],durationRangeMinutes:[15,60],goals:["consistency","health"],cooldownDays:2,pacePressure:"none"},
+  {templateId:"recovery_walk_run",titleVariants:["RECOVERY DAY","GENTLE RETURN","EASY MODE TODAY"],type:"recovery",difficulty:1,minLevel:1,distanceRangeKm:[1,4],xpBase:180,social:false,checkpointRange:[0,2],durationRangeMinutes:[15,45],goals:["health","consistency","fun"],cooldownDays:1,pacePressure:"none"},
+  {templateId:"return_quest",titleVariants:["WELCOME BACK","RETURN TO THE CITY","BACK ON THE PATH"],type:"returning",difficulty:1,minLevel:1,distanceRangeKm:[2,3],xpBase:300,social:false,checkpointRange:[1,2],durationRangeMinutes:[20,45],goals:["health","consistency","fun"],cooldownDays:14,pacePressure:"none"},
+  {templateId:"community_weekend",titleVariants:["VIENTIANE WEEKEND QUEST"],type:"community",difficulty:4,minLevel:1,distanceRangeKm:[2,10],xpBase:450,social:true,community:true,checkpointRange:[1,4],durationRangeMinutes:[20,120],goals:["social","exploration","fun","competition"],cooldownDays:7,pacePressure:"none"}
+];
+const families=[
+  {type:"distance",titles:["RIVER DISTANCE","STEADY ROAD"],goals:["health","consistency"] as QuestTemplate["goals"],social:false,pacePressure:"none" as const},
+  {type:"checkpoint",titles:["CHECKPOINT DASH","CITY MARKERS"],goals:["exploration","fun"] as QuestTemplate["goals"],social:false,pacePressure:"light" as const},
+  {type:"exploration",titles:["NEW STREET","HIDDEN CORNER"],goals:["exploration","fun"] as QuestTemplate["goals"],social:false,pacePressure:"none" as const},
+  {type:"social",titles:["RUNNER RENDEZVOUS","SOCIAL LOOP"],goals:["social","fun"] as QuestTemplate["goals"],social:true,pacePressure:"light" as const},
+  {type:"speed",titles:["TEMPO WINDOW","PACE CONTROL"],goals:["speed","competition"] as QuestTemplate["goals"],social:false,pacePressure:"target" as const},
+  {type:"consistency",titles:["KEEP GOING","WEEKLY RHYTHM"],goals:["consistency","health"] as QuestTemplate["goals"],social:false,pacePressure:"none" as const},
+  {type:"mystery",titles:["MYSTERY PATH","UNKNOWN SIGNAL"],goals:["exploration","fun"] as QuestTemplate["goals"],social:false,pacePressure:"none" as const},
+  {type:"weekend",titles:["WEEKEND MILES","SATURDAY CIRCUIT"],goals:["health","fun","social"] as QuestTemplate["goals"],social:true,pacePressure:"none" as const},
+];
+const extendedTemplates:QuestTemplate[]=Array.from({length:24},(_,i)=>{const family=families[i%families.length],tier=Math.floor(i/families.length)+1;return{templateId:`${family.type}_variant_${tier}`,titleVariants:family.titles.map(x=>`${x} ${tier}`),type:family.type,difficulty:Math.min(8,tier+2),minLevel:tier===1?1:tier*3,distanceRangeKm:[Math.max(1,tier),Math.min(15,4+tier*3)],xpBase:180+tier*120+i*5,social:family.social,checkpointRange:family.type==="checkpoint"||family.type==="exploration"||family.type==="mystery"?[tier,Math.min(7,tier+3)]:[0,Math.min(3,tier)],durationRangeMinutes:[15+tier*5,60+tier*20],goals:family.goals,cooldownDays:3+(i%5),pacePressure:family.pacePressure}});
+export const questTemplates:QuestTemplate[]=[...coreTemplates,...extendedTemplates];
