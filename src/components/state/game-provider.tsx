@@ -81,6 +81,7 @@ type GameState = {
 type GameContextValue = {
   state: GameState;
   hydrated: boolean;
+  onlineRunnerIds: string[];
   toast: string | null;
   notify: (message: string) => void;
   login: (email: string) => void;
@@ -135,6 +136,7 @@ const GameContext = createContext<GameContextValue | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(initialState);
   const [hydrated, setHydrated] = useState(false);
+  const [onlineRunnerIds, setOnlineRunnerIds] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [storageKey,setStorageKey]=useState("");
 
@@ -177,6 +179,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(current=>({...current,session:{email:user.email||""},profile:{...current.profile,displayName:profile?.display_name||user.user_metadata?.full_name||"Runner",username:profile?.username||`runner_${user.id.slice(0,8)}`,avatar:profile?.avatar_url||user.user_metadata?.avatar_url||"🏃",level:Number(profile?.level||1),totalXp:Number(profile?.total_xp||0),streak:Number(profile?.streak_days||0),visitStreak:Number(visitStreak||profile?.visit_streak_days||1),preferences:(profile?.profile_preferences as Record<string,string>|null)||{}},runSignal:activeSignal&&activeSignal.approx_latitude!==null&&activeSignal.approx_longitude!==null?{active:true,distance:Number(activeSignal.distance_km||5),radius:Number(activeSignal.radius_km||3),pace:`${paceFromDecimal(Number(activeSignal.pace_min||6))}–${paceFromDecimal(Number(activeSignal.pace_max||7))} / KM`,duration:Number(activeSignal.duration_minutes||60),partyType:activeSignal.party_type==="group"?"group":"partner",createdAt:activeSignal.created_at,expiresAt:activeSignal.expires_at,latitude:Number(activeSignal.approx_latitude),longitude:Number(activeSignal.approx_longitude)}:null,runs:liveRuns,followedRunnerIds,blockedRunnerIds,runnerDNA:dnaRow?dnaFromRow(dnaRow):current.runnerDNA,dailyQuests,questHistory,dailyQuestDate:dailyQuests.length?today:"",notices:(notices||[]).map(row=>({id:row.id,title:row.title,detail:row.body,read:Boolean(row.read_at),createdAt:row.created_at})),achievements:(earned||[]).flatMap(row=>{const value=row.achievements as unknown as {name?:string}|{name?:string}[]|null;return Array.isArray(value)?value.map(item=>item.name).filter(Boolean) as string[]:value?.name?[value.name]:[]}),settings:{...current.settings,privateProfile:Boolean(profile?.is_private),approximateLocation:profile?.location_visibility!=="hidden",questNotifications:profile?.quest_notifications!==false,matchGroup:profile?.match_group||"Everyone • 8 KM",emergencyContact:profile?.emergency_contact||""},behaviorMetrics:{...current.behaviorMetrics,runsLast7Days:last7.length,runsLast30Days:last30.length,distanceLast7Days:last7.reduce((sum,run)=>sum+run.distanceKm,0),distanceLast30Days:last30.reduce((sum,run)=>sum+run.distanceKm,0),avgPaceLast30Days:paceValues.length?Math.round(paceValues.reduce((a,b)=>a+b,0)/paceValues.length):null,avgDistanceLast30Days:last30.length?last30.reduce((sum,run)=>sum+run.distanceKm,0)/last30.length:null,streakDays:Number(profile?.streak_days||0)},seasonState:seasonStats?{...(current.seasonState.season.id===liveSeason.id?current.seasonState:initialSeasonState(new Date())),season:liveSeason,rp:Number(seasonStats.current_rp||0),rankTierId:seasonStats.current_rank_id,highestRankTierId:seasonStats.highest_rank_id,distanceKm:Number(seasonStats.distance_km||0),questCompletions:Number(seasonStats.quest_completions||0),activeDates:(activeDays||[]).map(row=>row.active_date),leaderboardPosition:Number(seasonStats.leaderboard_position||0),newcomerBonusClaimed:Boolean(seasonStats.newcomer_bonus_claimed),startedAt:seasonStats.started_at}:initialSeasonState(new Date()),seasonHistory}));
       setHydrated(true);
     }).catch(()=>setHydrated(true));
+  }, []);
+  useEffect(() => {
+    const client=createClient();
+    if(!client)return;
+    let channel:ReturnType<typeof client.channel>|null=null,activeUserId="",cancelled=false,generation=0;
+    const stop=()=>{generation+=1;activeUserId="";setOnlineRunnerIds([]);if(channel){const previous=channel;channel=null;void client.removeChannel(previous)}};
+    const start=(userId:string)=>{
+      if(cancelled||activeUserId===userId)return;
+      stop();activeUserId=userId;const currentGeneration=generation;
+      const next=client.channel("runquest-online-runners",{config:{presence:{key:userId}}});channel=next;
+      next.on("presence",{event:"sync"},()=>{if(!cancelled&&channel===next&&currentGeneration===generation)setOnlineRunnerIds(Object.keys(next.presenceState()).sort())}).subscribe(status=>{if(status==="SUBSCRIBED"&&!cancelled&&channel===next&&currentGeneration===generation)void next.track({userId,onlineAt:new Date().toISOString()})});
+    };
+    void client.auth.getSession().then(({data:{session}})=>{if(session?.user)start(session.user.id)});
+    const {data:{subscription}}=client.auth.onAuthStateChange((_event,session)=>{if(session?.user)start(session.user.id);else stop()});
+    return()=>{cancelled=true;subscription.unsubscribe();stop()};
   }, []);
   useEffect(() => { if (hydrated&&storageKey) localStorage.setItem(storageKey, JSON.stringify(state)); }, [state, hydrated,storageKey]);
 
@@ -228,7 +245,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const swapDailyQuest=(reason:string)=>{const old=state.dailyQuests.find(q=>q.assignmentType==="primary");if(!old)return;if(state.dailySwapsUsed>=3){notify("Daily swap limit reached");return}void fetch("/api/personalized-quests",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({assignmentId:old.id,reason})}).then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||"Quest swap failed");setState(s=>({...s,dailySwapsUsed:body.swapsUsed,dailyQuests:s.dailyQuests.map(q=>q.id===old.id?body.quest:q),questHistory:[{templateId:old.templateId,status:"skipped" as const,assignedAt:old.assignedAt,questType:old.questType,difficulty:old.difficulty},...s.questHistory]}));notify("A new live quest was saved")}).catch(error=>notify(error instanceof Error?error.message:"Quest swap failed"))};
   const acceptPersonalQuest=(assignmentId:string)=>{const selected=state.dailyQuests.find(q=>q.id===assignmentId);if(!selected)return;const client=createClient();if(client)void client.from("user_quest_assignments").update({status:"accepted"}).eq("id",assignmentId).then(({error})=>{if(error)notify(`Quest sync failed: ${error.message}`)});setState(s=>({...s,activeQuestId:assignmentId,dailyQuests:s.dailyQuests.map(q=>q.id===assignmentId?{...q,status:"accepted"}:q),notices:[addNotice("PERSONAL QUEST STARTED",`${selected.generatedTitle} is ready.`),...s.notices]}));notify("Personal quest accepted")};
 
-  const value = useMemo<GameContextValue>(() => ({ state, hydrated, toast, notify, login, logout, saveOnboarding, startQuest, inviteRunner, toggleFollow, blockRunner, setPartyReady, setRunSignal, completeRun, claimRun,markRouteShared, markNoticesRead, updateSettings, addReport, clearRunHistory,saveRunnerDNA,ensureDailyQuests,swapDailyQuest,acceptPersonalQuest }), [state, hydrated, toast, notify]);
+  const value = useMemo<GameContextValue>(() => ({ state, hydrated, onlineRunnerIds, toast, notify, login, logout, saveOnboarding, startQuest, inviteRunner, toggleFollow, blockRunner, setPartyReady, setRunSignal, completeRun, claimRun,markRouteShared, markNoticesRead, updateSettings, addReport, clearRunHistory,saveRunnerDNA,ensureDailyQuests,swapDailyQuest,acceptPersonalQuest }), [state, hydrated, onlineRunnerIds, toast, notify]);
   return <GameContext.Provider value={value}>{children}{toast && <div role="status" className="fixed bottom-24 left-1/2 z-[200] -translate-x-1/2 rounded-2xl border border-[#b7ff22]/40 bg-[#171a29] px-5 py-3 text-center text-xs font-black text-white shadow-2xl md:bottom-7"><span className="mr-2 text-[#b7ff22]">✓</span>{toast}</div>}</GameContext.Provider>;
 }
 
