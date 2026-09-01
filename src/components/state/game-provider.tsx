@@ -114,7 +114,7 @@ const defaultMetrics:BehaviorMetrics={runsLast7Days:0,runsLast30Days:0,distanceL
 const defaultJourney:MainJourneyProgress=initialJourneyProgress(new Date().toISOString());
 const initialState: GameState = {
   session: null,
-  profile: { displayName: "Runner", username: "runner", avatar: "🏃", level: 1, totalXp: 0, streak: 0, visitStreak: 0, preferences: {} },
+  profile: { displayName: "", username: "", avatar: "🏃", level: 1, totalXp: 0, streak: 0, visitStreak: 0, preferences: {} },
   activeQuestId: null,
   completedQuestIds: [],
   invitedRunnerIds: [],
@@ -142,11 +142,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const client=createClient();
-    if(!client){setStorageKey(`${STORAGE_KEY}:guest`);setHydrated(true);return}
+    if(!client){setHydrated(true);return}
     void client.auth.getUser().then(async({data:{user}})=>{
-      const scopedKey=`${STORAGE_KEY}:${user?.id??"guest"}`;setStorageKey(scopedKey);
+      if(!user){localStorage.removeItem(`${STORAGE_KEY}:guest`);setHydrated(true);return}
+      const scopedKey=`${STORAGE_KEY}:${user.id}`;setStorageKey(scopedKey);
       try{const saved=localStorage.getItem(scopedKey);if(saved){const parsed=JSON.parse(saved);setState(current=>({...current,...parsed,profile:{...current.profile,...parsed.profile},settings:{...current.settings,...parsed.settings}}))}}catch{/* Ignore corrupt account-scoped cache. */}
-      if(!user){setHydrated(true);return}
       const today=new Date().toISOString().slice(0,10);
       const {data:seasonId,error:seasonError}=await client.rpc("ensure_monthly_season");
       if(seasonError||!seasonId)throw seasonError||new Error("Current monthly season is unavailable");
@@ -203,7 +203,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const addNotice = (title: string, detail: string) => ({ id: `${Date.now()}-${title}`, title, detail, read: false, createdAt: new Date().toISOString() });
   const login = (email: string) => setState(s => ({ ...s, session: { email } }));
-  const logout = () => { setState(initialState);setStorageKey(`${STORAGE_KEY}:guest`);notify("Logged out successfully"); };
+  const logout = () => { localStorage.removeItem(`${STORAGE_KEY}:guest`);setState(initialState);setStorageKey("");notify("Logged out successfully"); };
   const saveOnboarding = (profile: Partial<GameState["profile"]>) => {setState(s=>({...s,profile:{...s.profile,...profile}}));const client=createClient();if(!client){notify("Live database is unavailable");return}void(async()=>{const {data:{user}}=await client.auth.getUser();if(!user){notify("Login required");return}const {error}=await client.from("profiles").update({...(profile.displayName?{display_name:profile.displayName}:{}),...(profile.username?{username:profile.username.toLowerCase().replace(/[^a-z0-9_.]/g,"").slice(0,24)}:{}),...(profile.avatar?{avatar_url:profile.avatar}:{}),...(profile.preferences?{profile_preferences:profile.preferences}:{}),...(profile.preferences?.gender?{gender:profile.preferences.gender}:{})}).eq("id",user.id);if(error){notify(`Profile sync failed: ${error.message}`);return}if(profile.preferences){const {error:preferenceError}=await client.from("runner_preferences").upsert({user_id:user.id,...runnerPreferencesFrom(profile.preferences)});if(preferenceError){notify(`Running preferences failed: ${preferenceError.message}`);return}}notify("Player profile saved")})()};
   const startQuest = (questId: string) => { setState(s => ({ ...s, activeQuestId: questId, notices: [addNotice("QUEST STARTED", "GPS tracking is ready. Head to the public start point."), ...s.notices] })); notify("Quest started — tracking is ready"); };
   const inviteRunner = (runnerId: string) => { setState(s => ({ ...s, invitedRunnerIds: [...new Set([...s.invitedRunnerIds, runnerId])], notices: [addNotice("PARTY INVITE SENT", "Your runner match has been invited."), ...s.notices] })); notify("Runner invited to your party"); };
